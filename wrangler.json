@@ -20,7 +20,8 @@
     {
       "binding": "DB",
       "database_name": "todo-db",
-      "database_id": "f36720ee-a460-4aa7-98a5-54c6c18c6b2b"
+      "database_id": "f36720ee-a460-4aa7-98a5-54c6c18c6b2b",
+      "migrations_dir": "drizzle/migrations"
     }
   ]
   /**

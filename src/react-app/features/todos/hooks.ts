@@ -12,16 +12,18 @@ export const useTodos = () => {
   });
 };
 
+interface AddTodoVariables {
+  text: string;
+  userName: string;
+}
+
 export const useAddTodo = () => {
   const queryClient = useQueryClient();
-  return useMutation<Todo, Error, string>({
-    // Todo: return type, Error: error type, string: input type (text)
+  return useMutation<Todo, Error, AddTodoVariables>({
     mutationFn: api.addTodo,
     onSuccess: (newTodo) => {
-      // Optimistically update the cache or refetch
-      // queryClient.setQueryData(TODO_QUERY_KEY, (oldTodos: Todo[] | undefined) => oldTodos ? [...oldTodos, newTodo] : [newTodo]);
       queryClient.invalidateQueries({ queryKey: TODO_QUERY_KEY });
-      toast.success(`Todo "${newTodo.text}" added!`);
+      toast.success(`Todo "${newTodo.text}" added by ${newTodo.userName}!`);
     },
     onError: (error) => {
       toast.error(`Failed to add todo: ${error.message}`);

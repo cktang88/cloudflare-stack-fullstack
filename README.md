@@ -10,6 +10,7 @@ This project demonstrates a complete full-stack application built solely on the 
 
 - **Cloudflare Workers:** Hosts the backend API and serves the frontend application.
 - **Cloudflare D1:** A serverless SQL database used for storing todo items.
+- **Drizzle ORM:** A TypeScript ORM used for database interactions with Cloudflare D1, providing type safety and a query builder.
 - **Hono.js:** A small, simple, and ultrafast web framework for the Cloudflare Workers backend API.
 - **Vite:** Frontend build tooling and development server, integrated with Cloudflare Workers via the `@cloudflare/vite-plugin` for a seamless local development experience that mirrors production.
 - **React:** A JavaScript library for building user interfaces.

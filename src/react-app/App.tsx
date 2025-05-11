@@ -4,9 +4,14 @@ import { Link, Route, Switch } from "wouter";
 import { TodoPage } from "./features/todos/TodoPage";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { useUserName } from "./hooks/useUserName";
+import { UserNameModal } from "./components/UserNameModal";
 import "./App.css"; // Assuming this has some base styles or can be removed if Tailwind handles everything
 
 function App() {
+  const { userName, setUserName, isModalOpen, setIsModalOpen, clearUserName } =
+    useUserName();
+
   return (
     <div className="min-h-screen bg-background font-sans antialiased">
       <header className="container mx-auto py-4">
@@ -16,13 +21,25 @@ function App() {
               Cloudflare Todo App
             </a>
           </Link>
-          {/* Future navigation items could go here */}
+          {userName && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Hi, {userName}!
+              </span>
+              <Button variant="outline" size="sm" onClick={clearUserName}>
+                Change Name
+              </Button>
+            </div>
+          )}
         </nav>
       </header>
 
       <main>
         <Switch>
-          <Route path="/" component={TodoPage} />
+          <Route
+            path="/"
+            component={() => <TodoPage currentUserName={userName} />}
+          />
           {/* Example of another route */}
           {/* <Route path="/about">
             <div className="container mx-auto py-4">
@@ -49,6 +66,11 @@ function App() {
         </p>
       </footer>
       <Toaster richColors />
+      <UserNameModal
+        isOpen={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onNameSubmit={setUserName}
+      />
     </div>
   );
 }

@@ -37,7 +37,7 @@ export function TodoItem({ todo }: TodoItemProps) {
       <div className="flex items-center gap-3">
         <Checkbox
           id={`todo-${todo.id}`}
-          checked={!!todo.completed} // Ensure boolean for checkbox
+          checked={todo.completed} // Simplified: todo.completed is now boolean
           onCheckedChange={handleToggleComplete}
           disabled={
             updateTodoMutation.isPending || deleteTodoMutation.isPending
@@ -58,15 +58,22 @@ export function TodoItem({ todo }: TodoItemProps) {
           {todo.text}
         </label>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleDelete}
-        disabled={deleteTodoMutation.isPending || updateTodoMutation.isPending}
-        aria-label="Delete todo"
-      >
-        <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-      </Button>
+      <div className="flex flex-col items-end">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleDelete}
+          disabled={
+            deleteTodoMutation.isPending || updateTodoMutation.isPending
+          }
+          aria-label="Delete todo"
+        >
+          <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
+        </Button>
+        <span className="text-xs text-muted-foreground mt-1">
+          Added by: {todo.userName}
+        </span>
+      </div>
     </div>
   );
 }

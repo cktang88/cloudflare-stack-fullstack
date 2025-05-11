@@ -1,28 +1,28 @@
 import { Hono } from "hono";
 import { validator } from "hono/validator";
+import { drizzle } from "drizzle-orm/d1";
+import { todos as todosTable, type SelectTodo } from "./db/schema"; // Corrected path
+import { eq, desc } from "drizzle-orm";
 
 // Define the environment bindings, including our D1 database
 type Env = {
   DB: D1Database;
 };
 
-// Define the structure of a Todo item
-type Todo = {
-  id: number;
-  text: string;
-  completed: number; // 0 for false, 1 for true
-  created_at: string;
-};
+// The SelectTodo type from Drizzle schema will be used instead of the manual Todo type.
 
 const app = new Hono<{ Bindings: Env }>();
 
 // GET /api/todos - List all todos
 app.get("/api/todos", async (c) => {
+  const db = drizzle(c.env.DB, { schema: { todosTable } });
   try {
-    const { results } = await c.env.DB.prepare(
-      "SELECT * FROM todos ORDER BY created_at DESC"
-    ).all<Todo>();
-    return c.json({ success: true, todos: results || [] });
+    const results = await db
+      .select()
+      .from(todosTable)
+      .orderBy(desc(todosTable.createdAt))
+      .all();
+    return c.json({ success: true, todos: results });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     return c.json({ success: false, error }, 500);
@@ -33,7 +33,7 @@ app.get("/api/todos", async (c) => {
 app.post(
   "/api/todos",
   validator("json", (value, c) => {
-    const { text } = value;
+    const { text, userName } = value as { text?: string; userName?: string };
     if (!text || typeof text !== "string" || text.trim() === "") {
       return c.json(
         {
@@ -43,42 +43,37 @@ app.post(
         400
       );
     }
-    return { body: { text: text.trim() } };
+    if (!userName || typeof userName !== "string" || userName.trim() === "") {
+      return c.json(
+        {
+          success: false,
+          error: "User name is required and must be a non-empty string.",
+        },
+        400
+      );
+    }
+    return { body: { text: text.trim(), userName: userName.trim() } };
   }),
   async (c) => {
-    const { text } = c.req.valid("json").body;
+    const { text, userName } = c.req.valid("json").body;
+    const db = drizzle(c.env.DB, { schema: { todosTable } });
     try {
-      const { results } = await c.env.DB.prepare(
-        "INSERT INTO todos (text) VALUES (?) RETURNING *"
-      )
-        .bind(text)
-        .all<Todo>();
-      if (results && results.length > 0) {
-        return c.json({ success: true, todo: results[0] }, 201);
-      } else {
-        // Fallback if RETURNING * is not immediately available or behaves unexpectedly in some environments
-        // D1 supports RETURNING *, but as a safeguard or for older versions:
-        const { meta } = await c.env.DB.prepare(
-          "SELECT last_insert_rowid() as id"
-        ).run();
-        if (meta && meta.last_row_id) {
-          const { results: newTodoResults } = await c.env.DB.prepare(
-            "SELECT * FROM todos WHERE id = ?"
-          )
-            .bind(meta.last_row_id)
-            .all<Todo>();
-          if (newTodoResults && newTodoResults.length > 0) {
-            return c.json({ success: true, todo: newTodoResults[0] }, 201);
-          }
-        }
-        return c.json(
-          {
-            success: false,
-            error: "Failed to create todo or retrieve it after creation.",
-          },
-          500
-        );
+      const newTodos = await db
+        .insert(todosTable)
+        .values({ text, userName })
+        .returning()
+        .all();
+      if (newTodos && newTodos.length > 0) {
+        return c.json({ success: true, todo: newTodos[0] }, 201);
       }
+      // Fallback if returning() doesn't yield results (should not happen with D1 adapter)
+      return c.json(
+        {
+          success: false,
+          error: "Failed to create todo or retrieve it after creation.",
+        },
+        500
+      );
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       return c.json({ success: false, error }, 500);
@@ -86,7 +81,7 @@ app.post(
   }
 );
 
-// PUT /api/todos/:id - Update a todo (mark as completed/uncompleted or edit text)
+// PUT /api/todos/:id - Update a todo
 app.put(
   "/api/todos/:id",
   validator("param", (value, c) => {
@@ -101,6 +96,7 @@ app.put(
   }),
   validator("json", (value, c) => {
     const { text, completed } = value;
+    // Validation for text (if provided)
     if (
       text !== undefined &&
       (typeof text !== "string" || text.trim() === "")
@@ -113,16 +109,12 @@ app.put(
         400
       );
     }
-    if (
-      completed !== undefined &&
-      typeof completed !== "boolean" &&
-      typeof completed !== "number"
-    ) {
+    // Validation for completed (if provided) - Drizzle schema expects boolean for `completed` field if mode: 'boolean' is used
+    if (completed !== undefined && typeof completed !== "boolean") {
+      // Drizzle schema for `completed` is `integer({ mode: 'boolean' })`, so it expects a boolean input.
+      // The database stores 0/1, but Drizzle handles the conversion.
       return c.json(
-        {
-          success: false,
-          error: "Completed status must be a boolean or a number (0 or 1).",
-        },
+        { success: false, error: "Completed status must be a boolean." },
         400
       );
     }
@@ -140,30 +132,26 @@ app.put(
   async (c) => {
     const { id } = c.req.valid("param");
     const { text, completed } = c.req.valid("json").body;
+    const db = drizzle(c.env.DB, { schema: { todosTable } });
 
-    let query = "UPDATE todos SET ";
-    const params: (string | number | null)[] = [];
-
+    const updateValues: Partial<Pick<SelectTodo, "text" | "completed">> = {};
     if (text !== undefined) {
-      query += "text = ?";
-      params.push(text);
+      updateValues.text = text;
     }
     if (completed !== undefined) {
-      if (params.length > 0) query += ", ";
-      query += "completed = ?";
-      // Ensure completed is stored as 0 or 1
-      params.push(completed === true || completed === 1 ? 1 : 0);
+      updateValues.completed = completed; // Drizzle handles boolean to 0/1 via schema mode: 'boolean'
     }
 
-    query += " WHERE id = ? RETURNING *";
-    params.push(id);
-
     try {
-      const { results } = await c.env.DB.prepare(query)
-        .bind(...params)
-        .all<Todo>();
-      if (results && results.length > 0) {
-        return c.json({ success: true, todo: results[0] });
+      const updatedTodos = await db
+        .update(todosTable)
+        .set(updateValues)
+        .where(eq(todosTable.id, id))
+        .returning()
+        .all();
+
+      if (updatedTodos && updatedTodos.length > 0) {
+        return c.json({ success: true, todo: updatedTodos[0] });
       } else {
         return c.json(
           { success: false, error: "Todo not found or not updated." },
@@ -192,34 +180,41 @@ app.delete(
   }),
   async (c) => {
     const { id } = c.req.valid("param");
+    const db = drizzle(c.env.DB, { schema: { todosTable } });
     try {
-      const { success } = await c.env.DB.prepare(
-        "DELETE FROM todos WHERE id = ?"
-      )
-        .bind(id)
+      // Drizzle's delete doesn't return the deleted row(s) by default with D1 unless .returning() is used and supported.
+      // For D1, .run() is typical for delete if you don't need the row back.
+      // Check D1 adapter specifics if .returning() is desired and fully supported for delete.
+      // For now, assume we just want to confirm deletion.
+      const result = await db
+        .delete(todosTable)
+        .where(eq(todosTable.id, id))
         .run();
-      if (success) {
-        // Check if any row was actually deleted
-        // const changes = (await c.env.DB.prepare("SELECT changes() as count").all<{count: number}>()).results?.[0]?.count;
 
-        // D1's run() method's success indicates the statement was valid and executed,
-        // but not necessarily that rows were affected.
-        // changes() function in SQLite tells us the number of rows modified by the last INSERT, UPDATE, or DELETE.
-        // However, this needs to be called in the same "transaction" or very soon after.
-        // For D1, it's simpler to check if the item still exists, or assume success if no error.
-        // Given the constraints, for simplicity, we'll assume success if no error occurs and the D1 `success` is true.
+      // D1 .run() result for delete doesn't typically give a clear row count directly in `result.changes` or similar field
+      // It usually indicates success of execution. We might need a follow-up or trust it if no error.
+      // Cloudflare D1 driver for Drizzle might have `result.meta.changes` but this can vary.
+      // For simplicity, we check if an error occurred.
+      // If you need to confirm a row was deleted, you might need to check meta.changes or if it exists before deletion.
 
-        // To be more certain, we can check `meta.changes` from the result of `run()`
-        // const { meta } = await c.env.DB.prepare("DELETE FROM todos WHERE id = ?").bind(id).run();
-        // if (meta.changes > 0) {
-        //   return c.json({ success: true, message: "Todo deleted successfully." });
-        // }
+      // Assuming success if no error, as before.
+      // If `result.meta.changes > 0` is reliable, that would be better.
+      // Let's check if `result.meta` exists and has `changes`
+      // According to drizzle-orm/d1, the result of run() is D1Result<T> which has a meta property.
+      if (result && result.meta && result.meta.changes > 0) {
+        return c.json({ success: true, message: "Todo deleted successfully." });
+      } else if (result && result.meta && result.meta.changes === 0) {
+        return c.json(
+          { success: false, error: "Todo not found or not deleted." },
+          404
+        );
+      } else {
+        // Fallback if meta.changes isn't available or indicates an issue
         return c.json({
           success: true,
-          message: "Todo deleted successfully (or did not exist).",
+          message:
+            "Todo deletion attempted (status unknown without changes info).",
         });
-      } else {
-        return c.json({ success: false, error: "Failed to delete todo." }, 500);
       }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
@@ -228,12 +223,6 @@ app.delete(
   }
 );
 
-// Fallback for any other GET requests (e.g. serving the React app)
-// This might need adjustment based on how Vite serves static assets with wrangler
-// The 'assets' configuration in wrangler.json handles SPA routing for GETs not matched by API.
-// So, we can remove the app.get("*", c.env.ASSETS.fetch); if 'assets' is configured.
-
-// The default route provided by the template
-app.get("/api/", (c) => c.json({ name: "Cloudflare Todo API" }));
+app.get("/api/", (c) => c.json({ name: "Cloudflare Todo API with Drizzle" }));
 
 export default app;

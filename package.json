@@ -24,6 +24,7 @@
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.43.1",
     "hono": "4.7.7",
     "lucide-react": "^0.509.0",
     "next-themes": "^0.4.6",
@@ -43,6 +44,7 @@
     "@types/react": "19.0.10",
     "@types/react-dom": "19.0.4",
     "@vitejs/plugin-react": "4.4.1",
+    "drizzle-kit": "^0.31.1",
     "eslint": "9.25.1",
     "eslint-plugin-react-hooks": "5.2.0",
     "eslint-plugin-react-refresh": "0.4.19",
@@ -60,7 +62,10 @@
     "deploy": "npm run build && wrangler deploy",
     "dev": "vite",
     "lint": "eslint .",
-    "preview": "npm run build && vite preview"
+    "preview": "npm run build && vite preview",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply todo-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply todo-db --remote"
   },
   "type": "module"
 }

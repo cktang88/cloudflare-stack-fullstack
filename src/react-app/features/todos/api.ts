@@ -16,11 +16,15 @@ export const getTodos = async (): Promise<Todo[]> => {
   return data.todos || []; // Backend returns { success: true, todos: [...] }
 };
 
-export const addTodo = async (text: string): Promise<Todo> => {
+export const addTodo = async (payload: {
+  text: string;
+  userName: string;
+}): Promise<Todo> => {
+  const { text, userName } = payload;
   const response = await fetch(`${API_BASE_URL}/todos`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, userName }), // Added userName
   });
   const data = await handleResponse<Todo>(response);
   return data.todo!; // Backend returns { success: true, todo: {...} }

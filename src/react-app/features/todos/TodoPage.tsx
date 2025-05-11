@@ -10,20 +10,30 @@ import { AddTodoForm } from "./AddTodoForm";
 import { TodoList } from "./TodoList";
 import { Skeleton } from "@/components/ui/skeleton"; // For loading state
 
-export function TodoPage() {
+interface TodoPageProps {
+  currentUserName: string | null;
+}
+
+export function TodoPage({ currentUserName }: TodoPageProps) {
   const { data: todos, isLoading, isError, error } = useTodos();
 
   return (
     <div className="container mx-auto py-8">
       <Card className="max-w-2xl mx-auto shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl">Cloudflare Fullstack Todos</CardTitle>
+          <CardTitle className="text-2xl">Shared Todos</CardTitle>
           <CardDescription>
-            Manage your tasks powered by Cloudflare D1 and Workers.
+            {currentUserName ? `Welcome, ${currentUserName}! ` : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AddTodoForm />
+          {currentUserName ? (
+            <AddTodoForm currentUserName={currentUserName} />
+          ) : (
+            <p className="text-center text-muted-foreground mb-4">
+              Please set your name to add todos.
+            </p>
+          )}
 
           {isLoading && (
             <div className="space-y-2 mt-4">
