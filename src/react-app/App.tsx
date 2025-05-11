@@ -1,65 +1,55 @@
 // src/App.tsx
 
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
-import cloudflareLogo from "./assets/Cloudflare_Logo.svg";
-import honoLogo from "./assets/hono.svg";
-import "./App.css";
+import { Link, Route, Switch } from "wouter";
+import { TodoPage } from "./features/todos/TodoPage";
+import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
+import "./App.css"; // Assuming this has some base styles or can be removed if Tailwind handles everything
 
 function App() {
-  const [count, setCount] = useState(0);
-  const [name, setName] = useState("unknown");
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-        <a href="https://hono.dev/" target="_blank">
-          <img src={honoLogo} className="logo cloudflare" alt="Hono logo" />
-        </a>
-        <a href="https://workers.cloudflare.com/" target="_blank">
-          <img
-            src={cloudflareLogo}
-            className="logo cloudflare"
-            alt="Cloudflare logo"
-          />
-        </a>
-      </div>
-      <h1>Vite + React + Hono + Cloudflare</h1>
-      <div className="card">
-        <button
-          onClick={() => setCount((count) => count + 1)}
-          aria-label="increment"
-        >
-          count is {count}
-        </button>
+    <div className="min-h-screen bg-background font-sans antialiased">
+      <header className="container mx-auto py-4">
+        <nav className="flex justify-between items-center">
+          <Link href="/">
+            <a className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
+              Cloudflare Todo App
+            </a>
+          </Link>
+          {/* Future navigation items could go here */}
+        </nav>
+      </header>
+
+      <main>
+        <Switch>
+          <Route path="/" component={TodoPage} />
+          {/* Example of another route */}
+          {/* <Route path="/about">
+            <div className="container mx-auto py-4">
+              <h1 className="text-2xl">About Page</h1>
+              <Button asChild>
+                <Link href="/">Go Home</Link>
+              </Button>
+            </div>
+          </Route> */}
+          <Route>
+            <div className="container mx-auto py-4 text-center">
+              <h1 className="text-4xl font-bold mb-4">404 - Page Not Found</h1>
+              <Button asChild>
+                <Link href="/">Go Home</Link>
+              </Button>
+            </div>
+          </Route>
+        </Switch>
+      </main>
+
+      <footer className="container mx-auto py-4 mt-8 text-center text-muted-foreground">
         <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
+          &copy; {new Date().getFullYear()} Todo App Inc. Built with Cloudflare.
         </p>
-      </div>
-      <div className="card">
-        <button
-          onClick={() => {
-            fetch("/api/")
-              .then((res) => res.json() as Promise<{ name: string }>)
-              .then((data) => setName(data.name));
-          }}
-          aria-label="get name"
-        >
-          Name from API is: {name}
-        </button>
-        <p>
-          Edit <code>worker/index.ts</code> to change the name
-        </p>
-      </div>
-      <p className="read-the-docs">Click on the logos to learn more</p>
-    </>
+      </footer>
+      <Toaster richColors />
+    </div>
   );
 }
 
