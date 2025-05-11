@@ -58,7 +58,7 @@ export const useDeleteTodo = () => {
   return useMutation<unknown, Error, number>({
     // unknown: API response type, Error: error type, number: input type (id)
     mutationFn: api.deleteTodo,
-    onSuccess: (data, id) => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: TODO_QUERY_KEY });
       // We don't have the todo text here directly from API response, so a generic message
       toast.success(`Todo (ID: ${id}) deleted!`);
