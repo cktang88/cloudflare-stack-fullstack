@@ -37,7 +37,7 @@
     "wouter": "^3.7.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.0.8",
+    "@cloudflare/vite-plugin": "^1.9.1",
     "@eslint/js": "9.25.1",
     "@tailwindcss/forms": "^0.5.10",
     "@types/node": "^22.14.1",
@@ -52,7 +52,7 @@
     "tw-animate-css": "^1.2.9",
     "typescript": "5.8.3",
     "typescript-eslint": "8.31.0",
-    "vite": "6.3.2",
+    "vite": "^7.0.3",
     "wrangler": "^4.14.4"
   },
   "scripts": {
