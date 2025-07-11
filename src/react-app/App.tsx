@@ -2,6 +2,7 @@
 
 import { Link, Route, Switch } from "wouter";
 import { TodoPage } from "./features/todos/TodoPage";
+import { Counter } from "./features/counter/Counter";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { useUserName } from "./hooks/useUserName";
@@ -16,11 +17,18 @@ function App() {
     <div className="min-h-screen bg-background font-sans antialiased">
       <header className="container mx-auto py-4">
         <nav className="flex justify-between items-center">
-          <Link href="/">
-            <a className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
-              Cloudflare Todo App
-            </a>
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <a className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
+                Cloudflare Todo App
+              </a>
+            </Link>
+            <Link href="/counter">
+              <a className="text-lg text-primary hover:text-primary/80 transition-colors">
+                Counter Demo
+              </a>
+            </Link>
+          </div>
           {userName && (
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
@@ -40,15 +48,12 @@ function App() {
             path="/"
             component={() => <TodoPage currentUserName={userName} />}
           />
-          {/* Example of another route */}
-          {/* <Route path="/about">
+          <Route path="/counter">
             <div className="container mx-auto py-4">
-              <h1 className="text-2xl">About Page</h1>
-              <Button asChild>
-                <Link href="/">Go Home</Link>
-              </Button>
+              <h1 className="text-3xl font-bold text-center mb-8">Cloudflare Actors Demo</h1>
+              <Counter />
             </div>
-          </Route> */}
+          </Route>
           <Route>
             <div className="container mx-auto py-4 text-center">
               <h1 className="text-4xl font-bold mb-4">404 - Page Not Found</h1>

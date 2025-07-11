@@ -23,6 +23,22 @@
       "database_id": "f36720ee-a460-4aa7-98a5-54c6c18c6b2b",
       "migrations_dir": "drizzle/migrations"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COUNTER",
+        "class_name": "CounterActor"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": [
+        "CounterActor"
+      ]
+    }
   ]
   /**
    * Smart Placement
