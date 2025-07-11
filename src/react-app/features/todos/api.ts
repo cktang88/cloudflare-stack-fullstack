@@ -1,69 +1,18 @@
-import { type Todo, type ApiResponse } from "./types";
+import { apiClient } from "../../lib/api-client";
+import type { CreateTodo, UpdateTodo } from "@shared/schemas";
 
-const API_BASE_URL = "/api"; // Assuming your Hono API is served under /api
+// Re-export from the API client for backward compatibility
+export const getTodos = () => apiClient.getTodos();
 
-async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
-  const data: ApiResponse<T> = await response.json();
-  if (!response.ok || !data.success) {
-    throw new Error(data.error || "API request failed");
-  }
-  return data;
-}
+export const addTodo = (payload: CreateTodo) => apiClient.createTodo(payload);
 
-export const getTodos = async (): Promise<Todo[]> => {
-  const response = await fetch(`${API_BASE_URL}/todos`);
-  const data = await handleResponse<Todo>(response);
-  return data.todos || []; // Backend returns { success: true, todos: [...] }
-};
-
-export const addTodo = async (payload: {
-  text: string;
-  userName: string;
-}): Promise<Todo> => {
-  const { text, userName } = payload;
-  const response = await fetch(`${API_BASE_URL}/todos`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, userName }), // Added userName
-  });
-  const data = await handleResponse<Todo>(response);
-  return data.todo!; // Backend returns { success: true, todo: {...} }
-};
-
-interface ApiUpdateTodoPayload {
-  id: number;
-  text?: string;
-  completed?: boolean; // Client-facing API uses boolean
-}
-
-export const updateTodo = async (
-  payload: ApiUpdateTodoPayload
-): Promise<Todo> => {
+export const updateTodo = async (payload: { id: number } & UpdateTodo) => {
   const { id, ...updateData } = payload;
-
-  const backendPayload: { text?: string; completed?: number } = {};
-  if (updateData.text !== undefined) {
-    backendPayload.text = updateData.text;
-  }
-  if (typeof updateData.completed === "boolean") {
-    backendPayload.completed = updateData.completed ? 1 : 0;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/todos/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(backendPayload), // Send 0/1 for completed
-  });
-  const data = await handleResponse<Todo>(response);
-  return data.todo!; // Backend returns { success: true, todo: {...} }
+  return apiClient.updateTodo(id, updateData);
 };
 
-export const deleteTodo = async (
-  id: number
-): Promise<ApiResponse<{ message: string }>> => {
-  const response = await fetch(`${API_BASE_URL}/todos/${id}`, {
-    method: "DELETE",
-  });
-  // Delete might not return a typical todo object, but a success message
-  return handleResponse<{ message: string }>(response);
-};
+export const deleteTodo = (id: number) => apiClient.deleteTodo(id);
+
+// Helper function for toggling todo completion status
+export const toggleTodo = (id: number, completed: boolean) => 
+  apiClient.toggleTodo(id, completed);

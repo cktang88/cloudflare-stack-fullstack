@@ -1,17 +1,48 @@
 import { Hono } from "hono";
 import { validator } from "hono/validator";
 import { drizzle } from "drizzle-orm/d1";
-import { todos as todosTable, type SelectTodo } from "./db/schema"; // Corrected path
+import { todos as todosTable, type SelectTodo } from "./db/schema";
 import { eq, desc } from "drizzle-orm";
+import { 
+  createTodoSchema, 
+  updateTodoSchema, 
+  todoIdSchema,
+  type CreateTodo,
+  type UpdateTodo,
+  type TodoResponse,
+  type TodosResponse,
+  type ErrorResponse,
+  type DeleteResponse
+} from "@shared/schemas";
+import { 
+  createErrorResponse, 
+  createValidationErrorResponse,
+  getHttpStatusFromErrorCode,
+  ERROR_CODES,
+  HTTP_STATUS 
+} from "@shared/index";
+import { configMiddleware } from "./middleware/config";
+import { loggingMiddleware } from "./middleware/logging";
 
 // Define the environment bindings, including our D1 database
 type Env = {
   DB: D1Database;
+  // Environment variables
+  NODE_ENV?: string;
+  DATABASE_NAME?: string;
+  DATABASE_ID?: string;
+  ENABLE_AUTH?: string;
+  ENABLE_API_DOCS?: string;
+  ENABLE_RATE_LIMITING?: string;
+  JWT_SECRET?: string;
+  LOG_LEVEL?: string;
 };
 
-// The SelectTodo type from Drizzle schema will be used instead of the manual Todo type.
-
 const app = new Hono<{ Bindings: Env }>();
+
+// Apply global middlewares
+app.use('*', configMiddleware);
+app.use('*', loggingMiddleware);
 
 // GET /api/todos - List all todos
 app.get("/api/todos", async (c) => {
@@ -22,10 +53,19 @@ app.get("/api/todos", async (c) => {
       .from(todosTable)
       .orderBy(desc(todosTable.createdAt))
       .all();
-    return c.json({ success: true, todos: results });
+    
+    const response: TodosResponse = { 
+      success: true, 
+      todos: results.map(todo => ({
+        ...todo,
+        createdAt: todo.createdAt // Already in ISO format from DB
+      }))
+    };
+    return c.json(response);
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    return c.json({ success: false, error }, 500);
+    const response: ErrorResponse = createErrorResponse(error, ERROR_CODES.DATABASE_ERROR);
+    return c.json(response, getHttpStatusFromErrorCode((response as any).code) as any);
   }
 });
 
@@ -33,50 +73,47 @@ app.get("/api/todos", async (c) => {
 app.post(
   "/api/todos",
   validator("json", (value, c) => {
-    const { text, userName } = value as { text?: string; userName?: string };
-    if (!text || typeof text !== "string" || text.trim() === "") {
+    const result = createTodoSchema.safeParse(value);
+    if (!result.success) {
+      const errors = result.error.flatten().fieldErrors;
       return c.json(
-        {
-          success: false,
-          error: "Todo text is required and must be a non-empty string.",
-        },
-        400
+        createValidationErrorResponse(errors),
+        HTTP_STATUS.BAD_REQUEST
       );
     }
-    if (!userName || typeof userName !== "string" || userName.trim() === "") {
-      return c.json(
-        {
-          success: false,
-          error: "User name is required and must be a non-empty string.",
-        },
-        400
-      );
-    }
-    return { body: { text: text.trim(), userName: userName.trim() } };
+    return result.data;
   }),
   async (c) => {
-    const { text, userName } = c.req.valid("json").body;
+    const validatedData = c.req.valid("json") as CreateTodo;
     const db = drizzle(c.env.DB, { schema: { todosTable } });
+    
     try {
       const newTodos = await db
         .insert(todosTable)
-        .values({ text, userName })
+        .values(validatedData)
         .returning()
         .all();
+      
       if (newTodos && newTodos.length > 0) {
-        return c.json({ success: true, todo: newTodos[0] }, 201);
+        const response: TodoResponse = { 
+          success: true, 
+          todo: {
+            ...newTodos[0],
+            createdAt: newTodos[0].createdAt
+          }
+        };
+        return c.json(response, HTTP_STATUS.CREATED);
       }
-      // Fallback if returning() doesn't yield results (should not happen with D1 adapter)
-      return c.json(
-        {
-          success: false,
-          error: "Failed to create todo or retrieve it after creation.",
-        },
-        500
+      
+      const response: ErrorResponse = createErrorResponse(
+        "Failed to create todo or retrieve it after creation.",
+        ERROR_CODES.INTERNAL_ERROR
       );
+      return c.json(response, HTTP_STATUS.INTERNAL_SERVER_ERROR);
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      return c.json({ success: false, error }, 500);
+      const response: ErrorResponse = createErrorResponse(error, ERROR_CODES.DATABASE_ERROR);
+      return c.json(response, getHttpStatusFromErrorCode((response as any).code) as any);
     }
   }
 );
@@ -85,61 +122,46 @@ app.post(
 app.put(
   "/api/todos/:id",
   validator("param", (value, c) => {
-    const id = parseInt(value.id, 10);
-    if (isNaN(id)) {
+    const result = todoIdSchema.safeParse(value);
+    if (!result.success) {
       return c.json(
-        { success: false, error: "Invalid todo ID parameter." },
-        400
+        createErrorResponse("Invalid todo ID parameter.", ERROR_CODES.VALIDATION_ERROR),
+        HTTP_STATUS.BAD_REQUEST
       );
     }
-    return { id };
+    return result.data;
   }),
   validator("json", (value, c) => {
-    const { text, completed } = value;
-    // Validation for text (if provided)
-    if (
-      text !== undefined &&
-      (typeof text !== "string" || text.trim() === "")
-    ) {
+    const result = updateTodoSchema.safeParse(value);
+    if (!result.success) {
+      const errors = result.error.flatten().fieldErrors;
+      const formErrors = result.error.flatten().formErrors;
+      
+      if (formErrors.length > 0) {
+        return c.json(
+          createErrorResponse(formErrors[0], ERROR_CODES.VALIDATION_ERROR),
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+      
       return c.json(
-        {
-          success: false,
-          error: "Todo text must be a non-empty string if provided.",
-        },
-        400
+        createValidationErrorResponse(errors),
+        HTTP_STATUS.BAD_REQUEST
       );
     }
-    // Validation for completed (if provided) - Drizzle schema expects boolean for `completed` field if mode: 'boolean' is used
-    if (completed !== undefined && typeof completed !== "boolean") {
-      // Drizzle schema for `completed` is `integer({ mode: 'boolean' })`, so it expects a boolean input.
-      // The database stores 0/1, but Drizzle handles the conversion.
-      return c.json(
-        { success: false, error: "Completed status must be a boolean." },
-        400
-      );
-    }
-    if (text === undefined && completed === undefined) {
-      return c.json(
-        {
-          success: false,
-          error: "Either text or completed status must be provided for update.",
-        },
-        400
-      );
-    }
-    return { body: { text: text?.trim(), completed } };
+    return result.data;
   }),
   async (c) => {
-    const { id } = c.req.valid("param");
-    const { text, completed } = c.req.valid("json").body;
+    const { id } = c.req.valid("param") as { id: number };
+    const updateData = c.req.valid("json") as UpdateTodo;
     const db = drizzle(c.env.DB, { schema: { todosTable } });
 
     const updateValues: Partial<Pick<SelectTodo, "text" | "completed">> = {};
-    if (text !== undefined) {
-      updateValues.text = text;
+    if (updateData.text !== undefined) {
+      updateValues.text = updateData.text;
     }
-    if (completed !== undefined) {
-      updateValues.completed = completed; // Drizzle handles boolean to 0/1 via schema mode: 'boolean'
+    if (updateData.completed !== undefined) {
+      updateValues.completed = updateData.completed;
     }
 
     try {
@@ -151,16 +173,25 @@ app.put(
         .all();
 
       if (updatedTodos && updatedTodos.length > 0) {
-        return c.json({ success: true, todo: updatedTodos[0] });
+        const response: TodoResponse = { 
+          success: true, 
+          todo: {
+            ...updatedTodos[0],
+            createdAt: updatedTodos[0].createdAt
+          }
+        };
+        return c.json(response);
       } else {
-        return c.json(
-          { success: false, error: "Todo not found or not updated." },
-          404
+        const response: ErrorResponse = createErrorResponse(
+          "Todo not found or not updated.",
+          ERROR_CODES.NOT_FOUND
         );
+        return c.json(response, HTTP_STATUS.NOT_FOUND);
       }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      return c.json({ success: false, error }, 500);
+      const response: ErrorResponse = createErrorResponse(error, ERROR_CODES.DATABASE_ERROR);
+      return c.json(response, getHttpStatusFromErrorCode((response as any).code) as any);
     }
   }
 );
@@ -169,56 +200,48 @@ app.put(
 app.delete(
   "/api/todos/:id",
   validator("param", (value, c) => {
-    const id = parseInt(value.id, 10);
-    if (isNaN(id)) {
+    const result = todoIdSchema.safeParse(value);
+    if (!result.success) {
       return c.json(
-        { success: false, error: "Invalid todo ID parameter." },
-        400
+        createErrorResponse("Invalid todo ID parameter.", ERROR_CODES.VALIDATION_ERROR),
+        HTTP_STATUS.BAD_REQUEST
       );
     }
-    return { id };
+    return result.data;
   }),
   async (c) => {
-    const { id } = c.req.valid("param");
+    const { id } = c.req.valid("param") as { id: number };
     const db = drizzle(c.env.DB, { schema: { todosTable } });
+    
     try {
-      // Drizzle's delete doesn't return the deleted row(s) by default with D1 unless .returning() is used and supported.
-      // For D1, .run() is typical for delete if you don't need the row back.
-      // Check D1 adapter specifics if .returning() is desired and fully supported for delete.
-      // For now, assume we just want to confirm deletion.
       const result = await db
         .delete(todosTable)
         .where(eq(todosTable.id, id))
         .run();
 
-      // D1 .run() result for delete doesn't typically give a clear row count directly in `result.changes` or similar field
-      // It usually indicates success of execution. We might need a follow-up or trust it if no error.
-      // Cloudflare D1 driver for Drizzle might have `result.meta.changes` but this can vary.
-      // For simplicity, we check if an error occurred.
-      // If you need to confirm a row was deleted, you might need to check meta.changes or if it exists before deletion.
-
-      // Assuming success if no error, as before.
-      // If `result.meta.changes > 0` is reliable, that would be better.
-      // Let's check if `result.meta` exists and has `changes`
-      // According to drizzle-orm/d1, the result of run() is D1Result<T> which has a meta property.
       if (result && result.meta && result.meta.changes > 0) {
-        return c.json({ success: true, message: "Todo deleted successfully." });
+        const response: DeleteResponse = { 
+          success: true, 
+          message: "Todo deleted successfully." 
+        };
+        return c.json(response);
       } else if (result && result.meta && result.meta.changes === 0) {
-        return c.json(
-          { success: false, error: "Todo not found or not deleted." },
-          404
+        const response: ErrorResponse = createErrorResponse(
+          "Todo not found or not deleted.",
+          ERROR_CODES.NOT_FOUND
         );
+        return c.json(response, HTTP_STATUS.NOT_FOUND);
       } else {
-        // Fallback if meta.changes isn't available or indicates an issue
-        return c.json({
+        const response: DeleteResponse = {
           success: true,
-          message:
-            "Todo deletion attempted (status unknown without changes info).",
-        });
+          message: "Todo deletion attempted (status unknown without changes info).",
+        };
+        return c.json(response);
       }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      return c.json({ success: false, error }, 500);
+      const response: ErrorResponse = createErrorResponse(error, ERROR_CODES.DATABASE_ERROR);
+      return c.json(response, getHttpStatusFromErrorCode((response as any).code) as any);
     }
   }
 );

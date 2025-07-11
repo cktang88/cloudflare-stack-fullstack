@@ -26,3 +26,8 @@ dist-ssr
 # wrangler files
 .wrangler
 .dev.vars*
+
+# Environment files
+.env
+.env.local
+.env.*.local
