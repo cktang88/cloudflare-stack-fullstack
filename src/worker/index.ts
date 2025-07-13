@@ -3,10 +3,12 @@ import { validator } from "hono/validator";
 import { drizzle } from "drizzle-orm/d1";
 import { todos as todosTable, type SelectTodo } from "./db/schema"; // Corrected path
 import { eq, desc } from "drizzle-orm";
+import { CounterActor } from "./actors/counter";
 
-// Define the environment bindings, including our D1 database
+// Define the environment bindings, including our D1 database and Durable Objects
 type Env = {
   DB: D1Database;
+  COUNTER: DurableObjectNamespace;
 };
 
 // The SelectTodo type from Drizzle schema will be used instead of the manual Todo type.
@@ -225,4 +227,68 @@ app.delete(
 
 app.get("/api/", (c) => c.json({ name: "Cloudflare Todo API with Drizzle" }));
 
+// Counter Actor API endpoints
+app.get("/api/counter/:id", async (c) => {
+  const id = c.req.param("id");
+  const durableObjectId = c.env.COUNTER.idFromName(id);
+  const durableObject = c.env.COUNTER.get(durableObjectId);
+  
+  const response = await durableObject.fetch(
+    new Request(`https://counter.internal/count`, {
+      method: "GET"
+    })
+  );
+  
+  const data = await response.json();
+  return c.json(data);
+});
+
+app.post("/api/counter/:id/increment", async (c) => {
+  const id = c.req.param("id");
+  const durableObjectId = c.env.COUNTER.idFromName(id);
+  const durableObject = c.env.COUNTER.get(durableObjectId);
+  
+  const response = await durableObject.fetch(
+    new Request(`https://counter.internal/increment`, {
+      method: "POST"
+    })
+  );
+  
+  const data = await response.json();
+  return c.json(data);
+});
+
+app.post("/api/counter/:id/decrement", async (c) => {
+  const id = c.req.param("id");
+  const durableObjectId = c.env.COUNTER.idFromName(id);
+  const durableObject = c.env.COUNTER.get(durableObjectId);
+  
+  const response = await durableObject.fetch(
+    new Request(`https://counter.internal/decrement`, {
+      method: "POST"
+    })
+  );
+  
+  const data = await response.json();
+  return c.json(data);
+});
+
+app.post("/api/counter/:id/reset", async (c) => {
+  const id = c.req.param("id");
+  const durableObjectId = c.env.COUNTER.idFromName(id);
+  const durableObject = c.env.COUNTER.get(durableObjectId);
+  
+  const response = await durableObject.fetch(
+    new Request(`https://counter.internal/reset`, {
+      method: "POST"
+    })
+  );
+  
+  const data = await response.json();
+  return c.json(data);
+});
+
 export default app;
+
+// Export the CounterActor Durable Object
+export { CounterActor };
